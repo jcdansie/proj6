@@ -1,0 +1,15 @@
+1. create matrix of nodes (n*n)
+2. Get BSSF
+3. Reduce matrix to get lower bound, add to queue
+
+While queue is not empty and time not out
+    explore first in queue (prune if greater than bssf), check all other cities except ones already visited (infinity in matrix gets skipped)
+        reduce matrix, update bound
+        if bound > bssf: prune
+        else: add to priority queue
+
+
+State:
+    list of edges so far
+    lower bound
+    matrix containing state
