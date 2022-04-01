@@ -85,28 +85,69 @@ class TSPSolver:
 	'''
 
 	def greedy( self,time_allowance=60.0 ):
-		pass
+		solutionFound = False
+		numSolutions = 1
+		startIndex = 0
+		cities = self._scenario.getCities()
+		num_cities = len(cities)
+		while not solutionFound and startIndex < len(cities):
+			results = {}
+			route = [cities[startIndex]]
+			visited = np.ones(num_cities)
+			visited[startIndex] = 0
+			start_time = time.time()
+			for i in range(1, num_cities):
+				minCity = None
+				minCityCost = np.inf
+				lastCity = route[len(route) - 1]
+				markAsVisited = -1
+				for j in range(num_cities):
+					if visited[j] == 0:
+						continue
+					tempCity = cities[j]
+					if lastCity.costTo(tempCity) < minCityCost:
+						minCity = tempCity
+						minCityCost = lastCity.costTo(tempCity)
+						markAsVisited = j
+				if minCity is not None:
+					route.append(minCity)
+				if markAsVisited >= 0:
+					visited[markAsVisited] = 0
+			if len(route) == num_cities:
+				solution = TSPSolution(route)
+				if not np.isinf(solution.cost):
+					solutionFound = True
+				else:
+					numSolutions += 1
+					startIndex += 1
+			else:
+				numSolutions += 1
+				startIndex += 1
 
+		end_time = time.time()
+		results['cost'] = solution.cost
+		results['time'] = end_time - start_time
+		results['count'] = numSolutions
+		results['soln'] = solution
+		results['max'] = None
+		results['total'] = None
+		results['pruned'] = None
+		return results
 
-
-	''' <summary>
-		This is the entry point for the branch-and-bound algorithm that you will implement
-		</summary>
-		<returns>results dictionary for GUI that contains three ints: cost of best solution,
-		time spent to find best solution, total number solutions found during search (does
-		not include the initial BSSF), the best solution found, and three more ints:
-		max queue size, total number of states created, and number of pruned states.</returns>
-	'''
-
+	# Branch and Bound algorithm
 	pruned = 0
+	states = 0
+	queueMax = 0
 	def branchAndBound( self, time_allowance=60.0 ):
 		results = {}
 		cities = self._scenario.getCities()
 		num_cities = len(cities)
 		count = 0
 		self.pruned = 0
+		self.states = 0
+		self.queueMax = 0
 
-		# generate BSSF
+		# generate initial BSSF
 		bssf = None
 		foundTour = False
 		while not foundTour:
@@ -121,45 +162,59 @@ class TSPSolver:
 				# Found a valid route
 				foundTour = True
 
-		# generate initial reduced cost matrix
+		# generate initial reduced cost matrix and lower bound
 		initial_matrix = np.matrix(np.ones((num_cities,num_cities)) * np.inf)
 		for i in range(num_cities):
 			for j in range(num_cities):
 				initial_matrix[i,j] = cities[i].costTo(cities[j])
 		initial_state = self.State(initial_matrix, num_cities, 0, [])
+		self.states += 1
 		self.reduce(initial_state)
 
 		# generate priority queue
 		queue = PriorityQueue()
 		queue.put(initial_state)
+		self.queueMax += 1
 
+		# begin branch and bound
 		start_time = time.time()
 		while not queue.empty() and time.time()-start_time < time_allowance:
 			# pop first, explore children
 			tempState = queue.get()
-
+			# prune
+			if(tempState.bound) > bssf.cost:
+				self.pruned += 1
 			# handle complete solution
-			if len(tempState.route) == tempState.size: # may be off by one, size + 1?
+			elif len(tempState.route) == tempState.size:
 				cityRoute = []
 				for i in range(len(tempState.route)):
 					cityRoute.append(cities[tempState.route[i]])
-				bssf = TSPSolution(cityRoute)
+				tempSolution = TSPSolution(cityRoute)
+				if not np.isinf(tempSolution.cost):
+					bssf = TSPSolution(cityRoute)
+
 				count += 1
-			elif tempState.bound > bssf.cost:
-				self.pruned += 1
+			# explore
 			else:
 				self.exploreState(tempState, bssf, queue)
+		# add states not dequeued to number pruned
+		for i in range(queue.qsize()):
+			tempState = queue.get()
+			if tempState.bound > bssf.cost:
+				self.pruned += 1
 
+		# return values
 		end_time = time.time()
 		results['cost'] = bssf.cost
 		results['time'] = end_time - start_time
 		results['count'] = count
 		results['soln'] = bssf
-		results['max'] = None
-		results['total'] = None
+		results['max'] = self.queueMax
+		results['total'] = self.states
 		results['pruned'] = self.pruned
 		return results
 
+	# function for reducing a matrix
 	def reduce(self, state):
 		# check rows
 		for i in range(state.size):
@@ -191,10 +246,13 @@ class TSPSolver:
 					state.matrix[i, j] -= columnMin
 		return
 
+	# function for exploring a state
 	def exploreState(self, state, bssf, queue):
+		# if first iteration start at first city
 		if len(state.route) == 0:
 			row = 0
 			state.route.append(0)
+		# start at last city in current state's route
 		else:
 			row = state.route[len(state.route) - 1]
 
@@ -202,7 +260,10 @@ class TSPSolver:
 		for j in range(state.size):
 			edge_dist = state.matrix[row, j]
 			if edge_dist == np.inf:
+				#self.pruned += 1
 				continue
+			self.states += 1
+			# create child state by copying current state
 			new_state = self.State(state.matrix.copy(), state.size, state.bound + edge_dist, state.route.copy())
 			new_state.route.append(j)
 			# remove rows and columns
@@ -211,13 +272,19 @@ class TSPSolver:
 				new_state.matrix[a, j] = np.inf
 			# reduce
 			self.reduce(new_state)
-			# add to queue or prune
+			# add to queue
 			if new_state.bound < bssf.cost:
 				queue.put(new_state)
+				# increase queue max size
+				if queue.qsize() > self.queueMax:
+					self.queueMax = queue.qsize()
+			# prune
 			else:
 				self.pruned += 1
 		return
 
+	# class for a state
+	# contains a matrix, bound, size of the matrix, and the current route
 	class State():
 		def __init__(self, matrix, size, bound, route):
 			self.matrix = matrix
@@ -225,11 +292,13 @@ class TSPSolver:
 			self.bound = bound
 			self.route = route
 
+		# for comparing two states (used in priority queue)
+		# includes length of route to encourage digging deeper
 		def __lt__(self, other):
-			return self.bound < other.bound
+			return self.bound/len(self.route) < other.bound/len(other.route)
 
 		def __eq__(self, other):
-			return self.bound == other.bound
+			return self.bound/len(self.route) == other.bound/len(other.route)
 
 		def __repr__(self):
 			return "State bound:% s" % (self.bound)
