@@ -336,9 +336,76 @@ class TSPSolver:
 						count += 1
 						improved = True
 
+		end_time = time.time()
+		results['cost'] = bssf.cost
+		results['time'] = end_time - start_time
+		results['count'] = count
+		results['soln'] = bssf
+		results['max'] = None
+		results['total'] = None
+		results['pruned'] = None
+		return results
 
 
+	# 3-opt algorithm
+	def opt3( self,time_allowance=60.0 ):
+		results = {}
+		cities = self._scenario.getCities()
+		ncities = len(cities)
+		improved = True
+		count = 0
 
+		bssf = self.greedy()['soln']		# initial bssf
+		start_time = time.time()
+
+		# Repeat these steps until there is no update with the cost
+		while improved and time.time()-start_time < time_allowance:
+			improved = False
+
+			for i in range(ncities - 2):
+				for j in range(i + 2, ncities - 1):
+					for k in range(j + 1, ncities):
+
+						new_route = copy.copy(bssf.route)
+						new_route[i + 1], new_route[j], new_route[k] = new_route[i + 1], new_route[k], new_route[j]	# swap the destination ([path[i], path[i+1]] => [path[i], path[j]])
+						new_bssf = TSPSolution(new_route)
+						if bssf.cost > new_bssf.cost:	# update the bssf if the new bssf has a smaller cost
+							bssf = new_bssf
+							count += 1
+							improved = True
+
+						new_route = copy.copy(bssf.route)
+						new_route[i + 1], new_route[j], new_route[k] = new_route[j], new_route[i + 1], new_route[k]		# swap the destination ([path[i], path[i+1]] => [path[i], path[j]])
+						new_bssf = TSPSolution(new_route)
+						if bssf.cost > new_bssf.cost:	# update the bssf if the new bssf has a smaller cost
+							bssf = new_bssf
+							count += 1
+							improved = True
+
+						new_route = copy.copy(bssf.route)
+						new_route[i + 1], new_route[j], new_route[k] = new_route[j], new_route[k], new_route[i + 1]		# swap the destination ([path[i], path[i+1]] => [path[i], path[j]])
+						new_bssf = TSPSolution(new_route)
+						if bssf.cost > new_bssf.cost:	# update the bssf if the new bssf has a smaller cost
+							bssf = new_bssf
+							count += 1
+							improved = True
+
+
+						new_route = copy.copy(bssf.route)
+						new_route[i + 1], new_route[j], new_route[k] = new_route[k], new_route[i + 1], new_route[j]	# swap the destination ([path[i], path[i+1]] => [path[i], path[j]])
+						new_bssf = TSPSolution(new_route)
+						if bssf.cost > new_bssf.cost:	# update the bssf if the new bssf has a smaller cost
+							bssf = new_bssf
+							count += 1
+							improved = True
+
+						new_route = copy.copy(bssf.route)
+						new_route[i + 1], new_route[j], new_route[k] = new_route[k], new_route[j], new_route[i + 1]	# swap the destination ([path[i], path[i+1]] => [path[i], path[j]])
+						new_bssf = TSPSolution(new_route)
+						if bssf.cost > new_bssf.cost:	# update the bssf if the new bssf has a smaller cost
+							bssf = new_bssf
+							count += 1
+							improved = True
 
 		end_time = time.time()
 		results['cost'] = bssf.cost
